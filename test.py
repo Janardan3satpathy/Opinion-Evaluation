@@ -313,25 +313,27 @@ def render_header():
 
     with header_cols[1]: # Use the middle column for content
         # --- Logo and Title Placement ---
-        # Adjusted ratio for slightly larger logo
-        logo_title_cols = st.columns([1, 15]) 
+        # Increased logo column ratio for larger logo
+        logo_title_cols = st.columns([1.5, 13]) 
         
         with logo_title_cols[0]:
             try:
-                # Increased width from 65 to 80
-                st.image('sct logo.jpg', width=120) 
+                # Increased width from 120 to 150 for larger logo
+                st.image('sct logo.jpg', width=150) 
             except FileNotFoundError:
                 st.error("Logo file 'sct logo.jpg' not found. Ensure it is in the same directory.")
-                st.markdown('<div style="height: 80px;"></div>', unsafe_allow_html=True) # Increased placeholder height
+                st.markdown('<div style="height: 150px;"></div>', unsafe_allow_html=True)
             
         with logo_title_cols[1]:
             st.markdown(
                 """
-                <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; text-align: left; padding-left: 10px;">
-                    <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight text-white" style="margin: 0; padding: 0;">
-                        SHA-SHIB COLLEGE OF TECHNOLOGY, BHOPAL </div>
-                        <div> AN ISO 9001:2008 CERTIFIED ENGINEERING COLLEGE. APPROVED BY A.I.C.T.E GOVT. OF INDIA, NEW DELHI & AFFILIATED TO R.G.P.V. & RECOGNISED BY DTE, BHOPAL (M.P.) </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; text-align: left; padding-left: 15px;">
+                    <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight text-white" style="margin: 0; padding: 0; white-space: nowrap;">
+                        SHA-SHIB COLLEGE OF TECHNOLOGY, BHOPAL
                     </h1>
+                    <div style="white-space: nowrap; font-size: 0.75rem; margin-top: 0.25rem; color: #fbbf24;">
+                        AN ISO 9001:2008 CERTIFIED ENGINEERING COLLEGE. APPROVED BY A.I.C.T.E GOVT. OF INDIA, NEW DELHI & AFFILIATED TO R.G.P.V. & RECOGNISED BY DTE, BHOPAL (M.P.)
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True
