@@ -5,6 +5,7 @@ import re
 import nltk
 import time
 from nltk.corpus import stopwords
+nltk.download('punkt_tab')
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from sklearn.model_selection import train_test_split
@@ -55,29 +56,14 @@ CONTRIBUTORS = [
 @st.cache_resource
 def initialize_ml_components():
     """Download required NLTK data and initialize text tools once."""
-    
-    # List of essential NLTK packages for this app
-    required_packages = ['stopwords', 'wordnet', 'punkt']
-    
-    for package in required_packages:
-        try:
-            # Check if package is available; if not, download it
-            nltk.data.find(f'tokenizers/{package}') # Check for 'punkt' specifically under tokenizers
-        except nltk.downloader.DownloadError:
-            try:
-                # If not found or initial check fails, attempt download
-                nltk.download(package, quiet=True)
-            except Exception as e:
-                st.error(f"Error downloading NLTK package '{package}': {e}. Check network connection.")
-                return None, None # Fail gracefully
-        except LookupError:
-             # This block handles the core issue: force download if a resource like 'punkt_tab' is erroneously requested
-             try:
-                nltk.download(package, quiet=True)
-             except Exception as e:
-                st.error(f"LookupError while checking/downloading NLTK package '{package}': {e}.")
-                return None, None
-                
+    try:
+        nltk.download('stopwords', quiet=True)
+        nltk.download('wordnet', quiet=True)
+        nltk.download('punkt', quiet=True)
+    except Exception as e:
+        st.error(f"Error downloading NLTK data: {e}. Check network connection.")
+        return None, None
+        
     lemmatizer = WordNetLemmatizer()
     STOPWORDS = set(stopwords.words('english'))
     return lemmatizer, STOPWORDS
@@ -285,6 +271,7 @@ def predict_sentiment_live(model, text):
         has_proba = hasattr(model.named_steps['clf'], 'predict_proba')
         
         # 2. Preprocess the text using the pipeline's internal methods
+        # The pipeline handles cleaning and vectorization internally
         
         if has_proba:
             positive_proba = model.predict_proba([text])[:, 1][0]
@@ -318,7 +305,7 @@ def render_header():
     
     # Start of the header container (using Streamlit's native container for alignment)
     st.markdown(
-        '<header class="header-section shadow-2xl shadow-yellow-500/50 py-6 sm:py-8 rounded-b-xl border-b border-yellow-400 mb-8">',
+        '<header class="header-section shadow-2xl shadow-pink-900/50 py-6 sm:py-8 rounded-b-xl border-b border-pink-900 mb-8">',
         unsafe_allow_html=True
     )
     
@@ -327,26 +314,26 @@ def render_header():
 
     with header_cols[1]: # Use the middle column for content
         # --- Logo and Title Placement ---
-        # Adjusted ratio for slightly larger logo
-        logo_title_cols = st.columns([1.5, 15]) 
+        # Increased logo column ratio for larger logo
+        logo_title_cols = st.columns([1.5, 13]) 
         
         with logo_title_cols[0]:
             try:
-                # Logo size is 150px
+                # Increased width from 120 to 150 for larger logo
                 st.image('sct logo.jpg', width=150) 
             except FileNotFoundError:
                 st.error("Logo file 'sct logo.jpg' not found. Ensure it is in the same directory.")
-                st.markdown('<div style="height: 150px;"></div>', unsafe_allow_html=True) # Increased placeholder height
+                st.markdown('<div style="height: 150px;"></div>', unsafe_allow_html=True)
             
         with logo_title_cols[1]:
             st.markdown(
                 """
-                <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; text-align: left; padding-left: 10px; white-space: nowrap;">
-                    <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight text-white" style="margin: 0; padding: 0;">
-                        SHA-SHIB COLLEGE OF TECHNOLOGY, BHOPAL 
+                <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; text-align: left; padding-left: 15px;">
+                    <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight text-white" style="margin: 0; padding: 0; white-space: nowrap;">
+                        SHA-SHIB COLLEGE OF TECHNOLOGY, BHOPAL
                     </h1>
-                    <div class="text-xs sm:text-base font-medium text-yellow-200 mt-1" style="margin: 0; padding: 0;">
-                         AN ISO 9001:2008 CERTIFIED ENGINEERING COLLEGE. APPROVED BY A.I.C.T.E GOVT. OF INDIA, NEW DELHI & AFFILIATED TO R.G.P.V. & RECOGNISED BY DTE, BHOPAL (M.P.)
+                    <div style="white-space: nowrap; font-size: 0.75rem; margin-top: 0.25rem; color: #fbbf24;">
+                        AN ISO 9001:2008 CERTIFIED ENGINEERING COLLEGE. APPROVED BY A.I.C.T.E GOVT. OF INDIA, NEW DELHI & AFFILIATED TO R.G.P.V. & RECOGNISED BY DTE, BHOPAL (M.P.)
                     </div>
                 </div>
                 """,
@@ -364,7 +351,7 @@ def render_footer():
     for c in CONTRIBUTORS:
         link_block = (
             '<div class="flex flex-col items-center p-2 rounded-lg bg-white/10 hover:bg-white/20 transition duration-150">'
-            f'<span class="font-bold text-orange-300 text-sm mb-1">{c["name"]}</span>' 
+            f'<span class="font-bold text-orange-200 text-sm mb-1">{c["name"]}</span>' 
             '<div class="flex space-x-3 text-sm">'
             f'<a href="{c["linkedIn"]}" target="_blank" title="LinkedIn: {c["name"]}" class="text-white hover:text-blue-300">🔗</a>'
             f'<a href="mailto:{c["email"]}" title="Email: {c["name"]}" class="text-white hover:text-red-300">📧</a>'
@@ -380,7 +367,7 @@ def render_footer():
 
     # Note: The 'footer-section' CSS styling ensures it is transparent.
     footer_html = (
-        '<footer class="footer-section text-white py-6 mt-10 shadow-2xl shadow-yellow-500/50 flex flex-col justify-center items-center rounded-t-xl border-t border-yellow-400">'
+        '<footer class="footer-section text-white py-6 mt-10 shadow-2xl shadow-pink-900/50 flex flex-col justify-center items-center rounded-t-xl border-t border-pink-900">'
             '<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs sm:text-sm w-full">'
                 
                 ''
@@ -393,7 +380,7 @@ def render_footer():
                 '<p class="mb-1">'
                     'Copyright © <span class="font-bold text-orange-300">2025</span> Janardan & Aman. All rights are reserved.'
                 '</p>'
-                '<p class="font-light text-yellow-200">'
+                '<p class="font-light text-pink-200">'
                     'Made and maintained for SHA-SHIB College of Technology'
                 '</p>'
             '</div>'
@@ -424,105 +411,69 @@ def main_app():
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* General App Styling - Blue to Orange Gradient Background */
+        /* General App Styling */
         .stApp {
             font-family: 'Inter', sans-serif;
-            /* Deep Blue to Deep Orange Gradient */
-            background: linear-gradient(180deg, #1e3a8a 0%, #c2410c 100%) !important; 
+            /* Dark background gradient retained */
+            background: linear-gradient(180deg, #330000 0%, #1a002a 50%, #0d0d19 100%) !important; 
             color: white;
             min-height: 100vh;
         }
         
-        /* --- HEADER STYLES --- */
+        /* --- NEW DISTINCT SECTION STYLES --- */
         .header-section {
-            /* Vibrant Gold/Orange Gradient for contrast */
-            background: linear-gradient(to right, #facc15 0%, #ea580c 50%, #facc15 100%) !important; 
-            color: #1f2937; /* Dark text for header */
-            box-shadow: 0 4px 15px rgba(250, 204, 21, 0.5) !important;
-        }
-        .header-section h1, .header-section h2 {
-            color: #1f2937 !important; /* Dark text for readability on yellow */
-        }
-        .header-section .text-white {
-            color: #1f2937 !important;
+            /* Pink on the sides, Orange in the center (Header maintains color) */
+            background: linear-gradient(to right, #ec4899 0%, #f97316 50%, #ec4899 100%) !important; 
         }
         
         .footer-section {
+            /* Footer now has NO background, making it transparent and same as .stApp background */
             background: none !important; 
         }
 
-        /* Style for the results box (Deep Blue to Deep Orange) */
+        /* Style for the results box */
         .result-box-bg {
-            background: linear-gradient(135deg, #1e3a8a 0%, #ea580c 100%); 
-            border: 2px solid #facc15; /* Gold Border */
+            background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+            border: 1px solid #6366f1;
             padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 30px -5px rgba(250, 204, 21, 0.3), 0 10px 10px -5px rgba(30, 58, 138, 0.4);
-        }
-        
-        /* Content Box Styling - High Contrast Sections */
-        /* 1. About Section - Dark Indigo */
-        .content-box-1 {
-             background: rgba(30, 58, 138, 0.7); /* Dark Indigo Translucent */
-             border: 1px solid #facc15; /* Gold Border */
-        }
-        /* 2. Upload Section - Medium Blue */
-        .content-box-2 {
-             background: rgba(45, 108, 212, 0.7); /* Medium Blue Translucent */
-             border: 1px solid #f97316; /* Orange Border */
-        }
-        /* 3. Algorithm Section - Dark Orange/Rust */
-        .content-box-3 {
-             background: rgba(194, 65, 12, 0.7); /* Dark Orange/Rust Translucent */
-             border: 1px solid #facc15; /* Gold Border */
-        }
-
-        
-        /* Streamlit Component Styling - Orange/Gold Button */
-        .stButton>button {
-            color: #1f2937 !important; /* Dark text on button */
-            background: linear-gradient(135deg, #facc15 0%, #f97316 100%) !important; /* Gold to Orange */
-            border-color: #facc15 !important; 
-            box-shadow: 0 4px 12px rgba(250, 204, 21, 0.6) !important;
-            transition: all 0.2s ease-in-out !important;
             border-radius: 0.75rem;
-            font-weight: 700;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+        }
+        
+        /* Streamlit Component Styling */
+        .stButton>button {
+            color: white !important;
+            background-color: #1d4ed8 !important; /* Blue 700 */
+            border-color: #1e40af !important; /* Blue 800 */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
+            transition: all 0.15s ease-in-out !important;
+            border-radius: 0.5rem;
+            font-weight: 600;
         }
         .stButton>button:hover {
-             background: linear-gradient(135deg, #f97316 0%, #facc15 100%) !important; 
-             transform: scale(1.03);
-             color: #000 !important;
+             background-color: #2563eb !important; /* Blue 600 */
+             transform: scale(1.02);
         }
-        
-        /* Selectbox styling */
+        /* Selectbox styling to match theme */
         .stSelectbox div[data-baseweb="select"] > div {
-            background-color: #312e81 !important; /* Deep Indigo */
+            background-color: #2563eb !important; /* Blue 600 */
             color: white !important;
-            border: 1px solid #f97316 !important; /* Orange */
+            border: 1px solid #60a5fa !important;
             border-radius: 0.5rem;
         }
-        
         /* File Uploader styling */
         .stFileUploader label {
-            color: #facc15 !important; /* Gold */
-            font-weight: 700;
+            color: #f472b6 !important; /* Pink 400 */
+            font-weight: 600;
         }
-        
         /* Custom horizontal rule for separation */
         .header-separator {
             border: 0;
-            height: 4px; 
-            background-image: linear-gradient(to right, rgba(255, 255, 255, 0), #f97316, rgba(255, 255, 255, 0)); /* Bright Orange */
+            height: 5px; /* Increased width/height */
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0), #f97316, rgba(255, 255, 255, 0)); /* Orange 500 */
             margin: 0;
             padding: 0;
-            opacity: 0.9;
-        }
-        
-        /* Ensure no text wrapping in the header */
-        .header-section h1, .header-section div {
-            white-space: nowrap; /* Apply to h1 and the main div holding the text */
-            overflow: hidden;
-            text-overflow: ellipsis;
+            opacity: 0.8;
         }
     </style>
     """
@@ -539,15 +490,15 @@ def main_app():
 
     col1, col2, col3 = st.columns(3, gap="large")
 
-    # 1. ABOUT SECTION BOX (Col 1) - Dark Indigo
+    # 1. ABOUT SECTION BOX (Col 1)
     with col1:
         st.markdown("""
-            <div class="content-box-1 p-8 rounded-xl shadow-2xl hover:shadow-lg hover:shadow-yellow-500/50 transition-shadow duration-300 text-center h-full">
-                <h2 class="text-2xl font-bold text-white mb-6 border-b-2 pb-2 border-yellow-300 inline-block">
+            <div class="bg-gradient-to-br from-cyan-600 to-blue-800 p-8 rounded-xl shadow-2xl hover:shadow-xl hover:shadow-cyan-500/50 transition-shadow duration-300 text-center border border-cyan-400 h-full">
+                <h2 class="text-2xl font-bold text-white mb-6 border-b-2 pb-2 border-cyan-300 inline-block">
                     About
                 </h2>
                 <div class="text-left">
-                    <h3 class="text-xl font-semibold text-yellow-200 mb-3">Opinion Evaluation</h3>
+                    <h3 class="text-xl font-semibold text-cyan-200 mb-3">Opinion Evaluation</h3>
                     <p class="text-gray-200 leading-relaxed text-sm">
                         Opinion Evaluation is the structured process of examining unstructured customer feedback (reviews/Opinions) to identify patterns, gauge sentiment, and uncover actionable insights. It serves as a vital tool for businesses to understand user satisfaction and improve products or services.
                     </p>
@@ -555,14 +506,14 @@ def main_app():
             </div>
         """, unsafe_allow_html=True)
 
-    # 2. UPLOAD DATASET SECTION BOX (Col 2) - Medium Blue
+    # 2. UPLOAD DATASET SECTION BOX (Col 2)
     with col2:
         st.markdown("""
-            <div class="content-box-2 p-8 rounded-xl shadow-2xl hover:shadow-lg hover:shadow-orange-500/50 transition-shadow duration-300 text-center h-full">
-                <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-orange-300 inline-flex items-center space-x-3">
+            <div class="bg-gradient-to-br from-teal-600 to-green-800 p-8 rounded-xl shadow-2xl hover:shadow-xl hover:shadow-green-500/50 transition-shadow duration-300 text-center border border-teal-400 h-full">
+                <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-teal-300 inline-flex items-center space-x-3">
                     <span>Upload Dataset</span>
                 </h2>
-                <p class="text-orange-200 mb-6 text-sm">
+                <p class="text-teal-200 mb-6 text-sm">
                     Only <span class="font-bold text-white">.CSV</span> files are supported for dataset input.
                 </p>
         """, unsafe_allow_html=True)
@@ -577,7 +528,7 @@ def main_app():
         st.markdown('</div>', unsafe_allow_html=True)
 
 
-    # 3. ALGORITHM SELECTION BOX (Col 3) - Dark Orange/Rust
+    # 3. ALGORITHM SELECTION BOX (Col 3)
     with col3:
         model_options = {
             'supervised_learning': {
@@ -593,11 +544,11 @@ def main_app():
         }
 
         st.markdown("""
-            <div class="content-box-3 p-8 rounded-xl shadow-2xl hover:shadow-lg hover:shadow-yellow-500/50 transition-shadow duration-300 text-center h-full">
-                <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-yellow-300 inline-flex items-center space-x-3">
+            <div class="bg-gradient-to-br from-red-600 to-orange-800 p-8 rounded-xl shadow-2xl hover:shadow-xl hover:shadow-red-500/50 transition-shadow duration-300 text-center border border-red-400 h-full">
+                <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-red-300 inline-flex items-center space-x-3">
                     <span>Select Algorithm</span>
                 </h2>
-                <p class="text-yellow-200 mb-6 text-sm">
+                <p class="text-red-200 mb-6 text-sm">
                     Choose the machine learning approach and specific model for the Evaluation.
                 </p>
         """, unsafe_allow_html=True)
@@ -662,7 +613,7 @@ def main_app():
     # --- 4. RESULTS SECTION BOX (Full Width) ---
     st.markdown("""
         <div class="result-box-bg w-full mt-8">
-            <h2 class="text-2xl font-bold text-white mb-6 border-b-2 pb-2 border-yellow-300 inline-block">
+            <h2 class="text-2xl font-bold text-white mb-6 border-b-2 pb-2 border-indigo-300 inline-block">
                 Evaluation Results
             </h2>
     """, unsafe_allow_html=True)
@@ -671,12 +622,12 @@ def main_app():
         metrics = st.session_state.last_metrics
         st.markdown(f"""
             <h3 class="text-xl font-bold text-green-300 mb-4">{st.session_state.last_message}</h3>
-            <p class="text-gray-200 mb-2">Model Used: <code class="text-yellow-300 font-bold">{st.session_state.last_model}</code></p>
-            <p class="text-gray-200 mb-4">Pipeline Time: <code class="text-yellow-300 font-bold">{metrics['Pipeline_Time']}</code></p>
+            <p class="text-gray-200 mb-2">Model Used: <code class="text-pink-300 font-bold">{st.session_state.last_model}</code></p>
+            <p class="text-gray-200 mb-4">Pipeline Time: <code class="text-pink-300 font-bold">{metrics['Pipeline_Time']}</code></p>
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-white">
                 <div>
-                    <h4 class="font-bold text-yellow-200 mb-2">CLASSIFICATION SUMMARY</h4>
+                    <h4 class="font-bold text-indigo-200 mb-2">CLASSIFICATION SUMMARY</h4>
                     <p>Accuracy: <span class="text-green-300">{metrics['Overall_Accuracy']}</span></p>
                     <p>Kappa Statistics: <span class="text-yellow-300">{metrics['Kappa_Statistics']}</span></p>
                     <p>MCC: <span class="text-yellow-300">{metrics['MCC']}</span></p>
@@ -684,14 +635,14 @@ def main_app():
                     <p>PRC Area: <span class="text-yellow-300">{metrics['PRC_Area']}</span></p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-yellow-200 mb-2">ERROR & SIZE</h4>
+                    <h4 class="font-bold text-indigo-200 mb-2">ERROR & SIZE</h4>
                     <p>MAE: <span class="text-red-300">{metrics['Mean_Absolute_Error']}</span></p>
                     <p>RMSE: <span class="text-red-300">{metrics['Root_Mean_Square_Error']}</span></p>
                     <p>RAE: <span class="text-red-300">{metrics['Relative_Absolute_Error']}</span></p>
-                    <p>Test Set Size: <span class="text-yellow-300">{metrics['Test_Set_Size']}</span></p>
+                    <p>Test Set Size: <span class="text-cyan-300">{metrics['Test_Set_Size']}</span></p>
                 </div>
                 <div>
-                    <h4 class="font-bold text-yellow-200 mb-2">POSITIVE CLASS METRICS</h4>
+                    <h4 class="font-bold text-indigo-200 mb-2">POSITIVE CLASS METRICS</h4>
                     <p>Precision: <span class="text-green-300">{metrics['Detailed_Classification_Metrics']['Precision (Positive Class)']}</span></p>
                     <p>Recall (TP Rate): <span class="text-green-300">{metrics['Detailed_Classification_Metrics']['Recall (Positive Class)']}</span></p>
                     <p>F1 Score: <span class="text-green-300">{metrics['Detailed_Classification_Metrics']['F1_Score (F-Measure)']}</span></p>
@@ -700,7 +651,7 @@ def main_app():
             </div>
 
             <div class="mt-6">
-                <h4 class="font-bold text-yellow-200 mb-2">CLASSIFICATION COUNT</h4>
+                <h4 class="font-bold text-indigo-200 mb-2">CLASSIFICATION COUNT</h4>
                 <p>Correctly Classified: <span class="text-green-300">{metrics['Correctly_Classified_Instances']}</span></p>
                 <p>Incorrectly Classified: <span class="text-red-300">{metrics['Incorrectly_Classified_Instances']}</span></p>
             </div>
@@ -720,7 +671,7 @@ def main_app():
     if st.session_state.get('trained_pipeline'):
         st.markdown("""
             <div class="result-box-bg w-full mt-8">
-                <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-yellow-300 inline-block">
+                <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-indigo-300 inline-block">
                     Live Opinion Prediction
                 </h2>
                 <p class="text-gray-200 mb-4">Test the currently trained model by entering any Opinion below.</p>
