@@ -355,29 +355,35 @@ def render_header():
         '<header class="header-section shadow-2xl shadow-pink-900/50 py-6 sm:py-8 rounded-b-xl border-b border-pink-900 mb-8">',
         unsafe_allow_html=True
     )
-    header_cols = st.columns([1, 4, 1])
-    with header_cols[1]:
-        logo_title_cols = st.columns([1.5, 13]) 
-        with logo_title_cols[0]:
-            try:
-                st.image('sct logo.jpg', width=150) 
-            except FileNotFoundError:
-                st.error("Logo file 'sct logo.jpg' not found. Ensure it is in the same directory.")
-                st.markdown('<div style="height: 150px;"></div>', unsafe_allow_html=True)
-        with logo_title_cols[1]:
-            st.markdown(
-                """
-                <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; text-align: left; padding-left: 15px;">
-                    <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight text-white" style="margin: 0; padding: 0; white-space: nowrap;">
-                        SHA-SHIB COLLEGE OF TECHNOLOGY, BHOPAL
-                    </h1>
-                    <div style="white-space: nowrap; font-size: 0.75rem; margin-top: 0.25rem; color: #fbbf24;">
-                        AN ISO 9001:2008 CERTIFIED ENGINEERING COLLEGE. APPROVED BY A.I.C.T.E GOVT. OF INDIA, NEW DELHI & AFFILIATED TO R.G.P.V. & RECOGNISED BY DTE, BHOPAL (M.P.)
-                    </div>
+    
+    # Use a single container with margin auto for center alignment
+    st.markdown('<div style="margin-left: auto; margin-right: auto; max-width: 1200px;">', unsafe_allow_html=True)
+    
+    # Use columns just for the logo/title alignment, but within a centered container
+    logo_title_cols = st.columns([1.5, 13]) 
+    
+    with logo_title_cols[0]:
+        try:
+            st.image('sct logo.jpg', width=150) 
+        except FileNotFoundError:
+            st.error("Logo file 'sct logo.jpg' not found. Ensure it is in the same directory.")
+            st.markdown('<div style="height: 150px;"></div>', unsafe_allow_html=True)
+    with logo_title_cols[1]:
+        st.markdown(
+            """
+            <div style="display: flex; flex-direction: column; justify-content: center; height: 100%; text-align: left; padding-left: 15px;">
+                <h1 class="text-xl sm:text-3xl font-extrabold tracking-tight text-white" style="margin: 0; padding: 0; white-space: nowrap;">
+                    SHA-SHIB COLLEGE OF TECHNOLOGY, BHOPAL
+                </h1>
+                <div style="white-space: nowrap; font-size: 0.75rem; margin-top: 0.25rem; color: #fbbf24;">
+                    AN ISO 9001:2008 CERTIFIED ENGINEERING COLLEGE. APPROVED BY A.I.C.T.E GOVT. OF INDIA, NEW DELHI & AFFILIATED TO R.G.P.V. & RECOGNISED BY DTE, BHOPAL (M.P.)
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.markdown('</div>', unsafe_allow_html=True) # Close the centering container
     st.markdown('</header>', unsafe_allow_html=True)
 
 def render_footer():
@@ -731,7 +737,7 @@ def main_app():
 
             with col_in:
                 user_review = st.text_area("Enter your review here:", 
-                                           placeholder="Type your Opinion here........", 
+                                           placeholder="Type your review here.", 
                                            key="user_review_input", 
                                            height=100, 
                                            label_visibility="collapsed")
