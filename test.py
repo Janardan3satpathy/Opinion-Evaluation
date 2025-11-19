@@ -4,8 +4,14 @@ import numpy as np
 import re
 import nltk
 import time
+import plotly.express as px
+import matplotlib.pyplot as plt
 from nltk.corpus import stopwords
-nltk.download('punkt_tab')
+# Ensure NLTK data is downloaded in the deployment environment
+try:
+    nltk.download('punkt_tab', quiet=True)
+except Exception:
+    pass
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from sklearn.model_selection import train_test_split
@@ -68,15 +74,12 @@ def initialize_ml_components():
     STOPWORDS = set(stopwords.words('english'))
     return lemmatizer, STOPWORDS
 
-# Initialize components globally before the main function runs
 lemmatizer, STOPWORDS = initialize_ml_components()
-
 
 # --- Custom Preprocessing Transformer (Backend Logic) ---
 class TextPreprocessor(BaseEstimator, TransformerMixin):
     """A custom transformer to handle all text cleaning steps within the pipeline."""
     def __init__(self):
-        # Access global NLTK components here
         self.lemmatizer = lemmatizer 
         self.stopwords = STOPWORDS
     
@@ -90,14 +93,11 @@ class TextPreprocessor(BaseEstimator, TransformerMixin):
         """Cleans text: HTML removal, lowercasing, stop word filtering, and lemmatization."""
         if not isinstance(text, str): 
             return ""
-
         # 1. Remove HTML tags (<br />)
         text = re.sub(r'<.*?>', '', text)
         # 2. Clean non-alphabetic characters and lowercase
         text = re.sub(r'[^a-zA-Z\s]', '', text).lower()
-
         words = word_tokenize(text)
-
         processed_words = [
             self.lemmatizer.lemmatize(word)
             for word in words
@@ -105,48 +105,110 @@ class TextPreprocessor(BaseEstimator, TransformerMixin):
         ]
         return " ".join(processed_words)
 
+# --- PLOTTING FUNCTIONS ---
+def plot_sentiment_distribution(df):
+    """Generates a Plotly pie chart for sentiment distribution."""
+    sentiment_counts = df['sentiment'].map({1: 'Positive', 0: 'Negative'}).value_counts().reset_index()
+    sentiment_counts.columns = ['Sentiment', 'Count']
+    color_map = {'Positive': 'green', 'Negative': 'red'}
+    fig = px.pie(
+        sentiment_counts, 
+        values='Count', 
+        names='Sentiment', 
+        title='<b>Dataset Sentiment Distribution (Pre-Training)</b>',
+        color='Sentiment',
+        color_discrete_map=color_map
+    )
+    fig.update_traces(textposition='inside', textinfo='percent+label')
+    fig.update_layout(
+        showlegend=True, 
+        margin=dict(t=50, b=0, l=0, r=0),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white'
+    )
+    return fig
+
+def plot_review_length_distribution(df):
+    """Generates a histogram for review length distribution (as a proxy for categories)."""
+    df['review_length'] = df['review'].apply(lambda x: len(str(x).split()))
+    fig = px.histogram(
+        df, 
+        x='review_length', 
+        color='sentiment',
+        color_discrete_map={1: 'green', 0: 'red'},
+        nbins=50, 
+        opacity=0.7,
+        title='<b>Distribution of Review Lengths by Sentiment (Feature Visualization)</b>',
+        labels={'review_length': 'Review Length (Words)', 'sentiment': 'Sentiment (1=Pos, 0=Neg)'}
+    )
+    fig.update_layout(
+        margin=dict(t=50, b=0, l=0, r=0),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white',
+        bargap=0.05
+    )
+    fig.update_xaxes(title_font=dict(size=14), tickfont=dict(size=10))
+    fig.update_yaxes(title_font=dict(size=14), tickfont=dict(size=10))
+    return fig
+
+def plot_confusion_matrix_counts(TN, FP, FN, TP):
+    """Generates a Plotly bar chart for confusion matrix counts (TP, FP, FN, TN)."""
+    data = pd.DataFrame({
+        'Metric': ['True Positive (TP)', 'False Positive (FP)', 'False Negative (FN)', 'True Negative (TN)'],
+        'Count': [TP, FP, FN, TN],
+        'Type': ['Correct', 'Error', 'Error', 'Correct']
+    })
+    color_map = {'Correct': '#48c78e', 'Error': '#ff3860'}
+    fig = px.bar(
+        data, 
+        x='Metric', 
+        y='Count', 
+        color='Type',
+        color_discrete_map=color_map,
+        title='<b>Confusion Matrix Counts (Test Set Performance)</b>',
+        labels={'Metric': 'Classification Result Type', 'Count': 'Count of Instances'},
+        text='Count'
+    )
+    fig.update_traces(textposition='outside')
+    fig.update_layout(
+        margin=dict(t=50, b=0, l=0, r=0),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white',
+        xaxis_title=None,
+        yaxis_title="Count"
+    )
+    return fig
+
 # --- Training and Evaluation Pipeline Function (Cached with st.cache_data) ---
 @st.cache_data(max_entries=10, show_spinner=False)
 def process_and_train_model(df_hash, df, classifier_name):
-    """
-    Runs the full ML process: splitting, preprocessing, vectorization, training, and evaluation.
-    Caches results based on input DataFrame hash and classifier name.
-    """
-    start_time = time.time() # Start time tracking
-    
-    # We use df_hash as the cache key, but work with the actual df
-
+    """Runs the full ML process: splitting, preprocessing, training, and evaluation."""
+    start_time = time.time()
     if df.shape[0] < 10:
-        return "Error", "Dataset too small for training (min 10 rows required).", None, None
+        return "Error", "Dataset too small for training (min 10 rows required).", None, None, None, None, None
     
     # --- FLEXIBLE COLUMN CHECK AND RENAME ---
     review_col, sentiment_col = None, None
-    
-    # Check for IMDB Dataset format (review, sentiment)
     if 'review' in df.columns and 'sentiment' in df.columns:
         review_col, sentiment_col = 'review', 'sentiment'
-    # Check for IMDB.csv format (text, label)
     elif 'text' in df.columns and 'label' in df.columns:
         review_col, sentiment_col = 'text', 'label'
-    
     if review_col is None:
-         return "Error", "CSV must contain columns named 'review' and 'sentiment' OR 'text' and 'label'. Please check your header names.", None, None
-
-    # Rename columns internally for consistent downstream processing
+         return "Error", "CSV must contain columns named 'review' and 'sentiment' OR 'text' and 'label'. Please check your header names.", None, None, None, None, None
     df_copy = df.copy()
     if review_col != 'review':
         df_copy.rename(columns={review_col: 'review'}, inplace=True)
     if sentiment_col != 'sentiment':
         df_copy.rename(columns={sentiment_col: 'sentiment'}, inplace=True)
-    # --- END FLEXIBLE COLUMN CHECK AND RENAME ---
-
     # Map sentiment to numerical labels: 1 for positive, 0 for negative/other
     df_copy['sentiment'] = df_copy['sentiment'].astype(str).str.lower().apply(lambda x: 1 if 'pos' in x or x == '1' else 0)
     
     X = df_copy['review']
     y = df_copy['sentiment']
-    
-    # Use a small test size (e.g., 20%) to ensure enough training data
+    sentiment_dist_df = df_copy[['review', 'sentiment']].copy()
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
@@ -176,39 +238,28 @@ def process_and_train_model(df_hash, df, classifier_name):
     try:
         pipeline.fit(X_train, y_train)
     except ValueError as e:
-        return "Error", f"Training failed. Check data format: {e}", None, None
+        return "Error", f"Training failed. Check data format: {e}", None, None, None, None, None
 
     # 4. Evaluate
     y_pred = pipeline.predict(X_test)
-    
-    # Stop time tracking
     end_time = time.time()
     pipeline_time = end_time - start_time
     
     # --- CALCULATE ALL REQUESTED METRICS ---
-    
-    # Confusion Matrix Components (TN, FP, FN, TP)
     cm = confusion_matrix(y_test, y_pred)
     TN, FP, FN, TP = cm.ravel()
-    
     total_instances = len(y_test)
     correctly_classified = TP + TN
     incorrectly_classified = FP + FN
-
-    # TP/FP Rates and Error Rates
     tpr = TP / (TP + FN) if (TP + FN) > 0 else 0
     fpr = FP / (FP + TN) if (FP + TN) > 0 else 0
     mae = mean_absolute_error(y_test, y_pred)
     mse = mean_squared_error(y_test, y_pred)
     rmse = np.sqrt(mse)
-    
-    # Relative Absolute Error (RAE)
     mean_y_test = np.mean(y_test)
     sum_abs_error = np.sum(np.abs(y_pred - y_test))
     sum_abs_baseline_error = np.sum(np.abs(y_test - mean_y_test))
     rae = sum_abs_error / sum_abs_baseline_error if sum_abs_baseline_error > 0 else 0
-
-    # Probabilistic Metrics (ROC/PRC Area)
     roc_auc_str = "N/A (Model lacks probability output)"
     prc_auc_str = "N/A (Model lacks probability output)"
     precision_pos = 0
@@ -221,16 +272,13 @@ def process_and_train_model(df_hash, df, classifier_name):
             roc_auc = roc_auc_score(y_test, y_pred_proba)
             roc_auc_str = f"{roc_auc:.4f}"
         except Exception:
-            pass # Keep as N/A
-
-    # Standard metrics for the positive class
+            pass
     try:
         precision_pos = precision_score(y_test, y_pred, pos_label=1)
         recall_pos = recall_score(y_test, y_pred, pos_label=1)
         f1_pos = f1_score(y_test, y_pred, pos_label=1)
     except Exception:
-        pass # Keep as 0
-
+        pass
     mcc = matthews_corrcoef(y_test, y_pred)
     kappa = cohen_kappa_score(y_test, y_pred)
     
@@ -257,8 +305,13 @@ def process_and_train_model(df_hash, df, classifier_name):
         "Test_Set_Size": total_instances
     }
 
-    # Return the trained pipeline along with metrics
-    return "Success", "Analysis Complete", metrics, pipeline
+    # Generate plots
+    sentiment_fig = plot_sentiment_distribution(sentiment_dist_df)
+    review_length_fig = plot_review_length_distribution(sentiment_dist_df)
+    cm_counts_fig = plot_confusion_matrix_counts(TN, FP, FN, TP)
+
+    # Return the trained pipeline along with metrics and figures
+    return "Success", "Analysis Complete", metrics, pipeline, sentiment_fig, review_length_fig, cm_counts_fig
 
 # --- Live Prediction Function (Uses the trained model) ---
 def predict_sentiment_live(model, text):
@@ -270,15 +323,12 @@ def predict_sentiment_live(model, text):
         # 1. Check if the model has predict_proba
         has_proba = hasattr(model.named_steps['clf'], 'predict_proba')
         
-        # 2. Preprocess the text using the pipeline's internal methods
-        # The pipeline handles cleaning and vectorization internally
-        
         if has_proba:
             positive_proba = model.predict_proba([text])[:, 1][0]
             confidence = max(positive_proba, 1 - positive_proba) * 100
             
             # Nuanced Thresholding
-            if 0.45 <= positive_proba <= 0.55: # Tightened threshold for 'Neutral'
+            if 0.45 <= positive_proba <= 0.55:
                 sentiment_label = "Neutral 😐"
             elif positive_proba > 0.55:
                 sentiment_label = "Positive 🎉"
@@ -290,7 +340,7 @@ def predict_sentiment_live(model, text):
             # Fallback for models without probability output (like LinearSVC)
             prediction = model.predict([text])[0]
             sentiment_label = "Positive (High Confidence)" if prediction == 1 else "Negative (High Confidence)"
-            confidence = 90.0 # Standard high confidence for hard classification
+            confidence = 90.0
             
         return sentiment_label, confidence, None
         
@@ -299,32 +349,21 @@ def predict_sentiment_live(model, text):
 
 
 # --- 2. LAYOUT COMPONENT FUNCTIONS (Header and Footer) ---
-
 def render_header():
-    """Renders the custom header with the logo placed before the title."""
-    
-    # Start of the header container (using Streamlit's native container for alignment)
+    """Renders the custom header with the logo and college information."""
     st.markdown(
         '<header class="header-section shadow-2xl shadow-pink-900/50 py-6 sm:py-8 rounded-b-xl border-b border-pink-900 mb-8">',
         unsafe_allow_html=True
     )
-    
-    # Use Streamlit columns for logo and title alignment
-    header_cols = st.columns([1, 4, 1]) # 1: Logo area, 4: Title area, 1: Spacer
-
-    with header_cols[1]: # Use the middle column for content
-        # --- Logo and Title Placement ---
-        # Increased logo column ratio for larger logo
+    header_cols = st.columns([1, 4, 1])
+    with header_cols[1]:
         logo_title_cols = st.columns([1.5, 13]) 
-        
         with logo_title_cols[0]:
             try:
-                # Increased width from 120 to 150 for larger logo
                 st.image('sct logo.jpg', width=150) 
             except FileNotFoundError:
                 st.error("Logo file 'sct logo.jpg' not found. Ensure it is in the same directory.")
                 st.markdown('<div style="height: 150px;"></div>', unsafe_allow_html=True)
-            
         with logo_title_cols[1]:
             st.markdown(
                 """
@@ -339,14 +378,10 @@ def render_header():
                 """,
                 unsafe_allow_html=True
             )
-
     st.markdown('</header>', unsafe_allow_html=True)
 
-
 def render_footer():
-    """Renders the custom footer as a distinct section with centered content and contributor links."""
-    
-    # Dynamically generate the contributor social link HTML
+    """Renders the custom footer with contributor links."""
     social_links_html_list = []
     for c in CONTRIBUTORS:
         link_block = (
@@ -362,21 +397,14 @@ def render_footer():
             '</div>'
         )
         social_links_html_list.append(link_block)
-    
     social_links_block = "\n".join(social_links_html_list)
-
-    # Note: The 'footer-section' CSS styling ensures it is transparent.
     footer_html = (
         '<footer class="footer-section text-white py-6 mt-10 shadow-2xl shadow-pink-900/50 flex flex-col justify-center items-center rounded-t-xl border-t border-pink-900">'
             '<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs sm:text-sm w-full">'
-                
-                ''
                 '<h3 class="text-lg font-bold text-white mb-2">Developed By</h3>'
                 '<div class="flex flex-wrap justify-center items-center space-x-6 space-y-2 mb-4">'
                     + social_links_block +
                 '</div>'
-
-                ''
                 '<p class="mb-1">'
                     'Copyright © <span class="font-bold text-orange-300">2025</span> Janardan & Aman. All rights are reserved.'
                 '</p>'
@@ -388,50 +416,35 @@ def render_footer():
     )
     st.markdown(footer_html, unsafe_allow_html=True)
 
-
 # --- 3. Main Application Function ---
-
 def main_app():
-    
     if lemmatizer is None:
         st.error("Application setup failed due to NLTK initialization error. Please try restarting.")
         return 
-        
     if 'trained_pipeline' not in st.session_state:
         st.session_state['trained_pipeline'] = None
-
     st.set_page_config(
         page_title="IMDb Review Sentiment Analyzer (Full Stack)", 
         layout="wide",
         initial_sidebar_state="collapsed"
     )
-
     # Inject Custom CSS (Streamlit components need styling)
     custom_css = """
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        /* General App Styling */
         .stApp {
             font-family: 'Inter', sans-serif;
-            /* Dark background gradient retained */
             background: linear-gradient(180deg, #330000 0%, #1a002a 50%, #0d0d19 100%) !important; 
             color: white;
             min-height: 100vh;
         }
-        
-        /* --- NEW DISTINCT SECTION STYLES --- */
         .header-section {
-            /* Pink on the sides, Orange in the center (Header maintains color) */
             background: linear-gradient(to right, #ec4899 0%, #f97316 50%, #ec4899 100%) !important; 
         }
-        
         .footer-section {
-            /* Footer now has NO background, making it transparent and same as .stApp background */
             background: none !important; 
         }
-
-        /* Style for the results box */
         .result-box-bg {
             background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
             border: 1px solid #6366f1;
@@ -439,58 +452,49 @@ def main_app():
             border-radius: 0.75rem;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
         }
-        
-        /* Streamlit Component Styling */
         .stButton>button {
             color: white !important;
-            background-color: #1d4ed8 !important; /* Blue 700 */
-            border-color: #1e40af !important; /* Blue 800 */
+            background-color: #1d4ed8 !important;
+            border-color: #1e40af !important;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
             transition: all 0.15s ease-in-out !important;
             border-radius: 0.5rem;
             font-weight: 600;
         }
         .stButton>button:hover {
-             background-color: #2563eb !important; /* Blue 600 */
+             background-color: #2563eb !important;
              transform: scale(1.02);
         }
-        /* Selectbox styling to match theme */
         .stSelectbox div[data-baseweb="select"] > div {
-            background-color: #2563eb !important; /* Blue 600 */
+            background-color: #2563eb !important;
             color: white !important;
             border: 1px solid #60a5fa !important;
             border-radius: 0.5rem;
         }
-        /* File Uploader styling */
         .stFileUploader label {
-            color: #f472b6 !important; /* Pink 400 */
+            color: #f472b6 !important;
             font-weight: 600;
         }
-        /* Custom horizontal rule for separation */
         .header-separator {
             border: 0;
-            height: 5px; /* Increased width/height */
-            background-image: linear-gradient(to right, rgba(255, 255, 255, 0), #f97316, rgba(255, 255, 255, 0)); /* Orange 500 */
+            height: 5px;
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0), #f97316, rgba(255, 255, 255, 0));
             margin: 0;
             padding: 0;
             opacity: 0.8;
         }
+        .modebar {
+            background-color: transparent !important;
+        }
     </style>
     """
     st.markdown(custom_css, unsafe_allow_html=True)
-    
-    # --- RENDER HEADER ---
     render_header()
-    
-    # --- HEADER SEPARATOR LINE ---
     st.markdown('<div class="max-w-7xl mx-auto px-4 sm:px-8"><hr class="header-separator"></div>', unsafe_allow_html=True)
-    
-    # --- Main Content Area - Reverted to 3-Column Layout ---
     st.markdown('<div class="max-w-7xl mx-auto px-4 sm:px-8">', unsafe_allow_html=True)
-
     col1, col2, col3 = st.columns(3, gap="large")
 
-    # 1. ABOUT SECTION BOX (Col 1)
+    # 1. ABOUT SECTION BOX
     with col1:
         st.markdown("""
             <div class="bg-gradient-to-br from-cyan-600 to-blue-800 p-8 rounded-xl shadow-2xl hover:shadow-xl hover:shadow-cyan-500/50 transition-shadow duration-300 text-center border border-cyan-400 h-full">
@@ -506,7 +510,7 @@ def main_app():
             </div>
         """, unsafe_allow_html=True)
 
-    # 2. UPLOAD DATASET SECTION BOX (Col 2)
+    # 2. UPLOAD DATASET SECTION BOX
     with col2:
         st.markdown("""
             <div class="bg-gradient-to-br from-teal-600 to-green-800 p-8 rounded-xl shadow-2xl hover:shadow-xl hover:shadow-green-500/50 transition-shadow duration-300 text-center border border-teal-400 h-full">
@@ -517,18 +521,15 @@ def main_app():
                     Only <span class="font-bold text-white">.CSV</span> files are supported for dataset input.
                 </p>
         """, unsafe_allow_html=True)
-
         uploaded_file = st.file_uploader(
             "Select CSV File", 
             type=['csv'], 
             key="file_uploader",
             label_visibility="collapsed"
         )
-        
         st.markdown('</div>', unsafe_allow_html=True)
 
-
-    # 3. ALGORITHM SELECTION BOX (Col 3)
+    # 3. ALGORITHM SELECTION BOX
     with col3:
         model_options = {
             'supervised_learning': {
@@ -542,7 +543,6 @@ def main_app():
             'semi_supervised_learning': {'coming_soon': 'Semi-Supervised Learning (Coming Soon)'},
             'reinforcement_learning': {'coming_soon': 'Reinforcement Learning (Coming Soon)'}
         }
-
         st.markdown("""
             <div class="bg-gradient-to-br from-red-600 to-orange-800 p-8 rounded-xl shadow-2xl hover:shadow-xl hover:shadow-red-500/50 transition-shadow duration-300 text-center border border-red-400 h-full">
                 <h2 class="2xl font-bold text-white mb-6 border-b-2 pb-2 border-red-300 inline-flex items-center space-x-3">
@@ -552,7 +552,6 @@ def main_app():
                     Choose the machine learning approach and specific model for the Evaluation.
                 </p>
         """, unsafe_allow_html=True)
-
         analysis_type = st.selectbox(
             "Evaluation Type:",
             options=model_options.keys(),
@@ -560,13 +559,8 @@ def main_app():
             index=0,
             key="analysis_type_select"
         )
-        
-        # Get models based on selected type
         current_models = model_options.get(analysis_type, {})
-        
-        # Determine disabled state for model selection
         is_model_select_disabled = (analysis_type != 'supervised_learning')
-
         selected_model_key = st.selectbox(
             "Select the model to be used:",
             options=list(current_models.keys()),
@@ -575,40 +569,33 @@ def main_app():
             disabled=is_model_select_disabled,
             key="model_select"
         )
-        
-        # Ensure the button is disabled if no file or a placeholder model is selected
         is_button_disabled = uploaded_file is None or selected_model_key == 'coming_soon'
-
         st.button(
             "Run Evaluation", 
             key="run_analysis_button",
             disabled=is_button_disabled
         )
-        
         st.markdown('</div>', unsafe_allow_html=True)
 
     # --- ANALYSIS LOGIC BLOCK (Run on Button Click) ---
     if st.session_state.run_analysis_button and uploaded_file is not None and not is_button_disabled:
-        
-        # Read the file and calculate a hash for caching
         file_content = uploaded_file.getvalue().decode("utf-8")
         df = pd.read_csv(StringIO(file_content))
-        # Use content hash as part of the cache key
         df_hash = hash(file_content) 
-
         with st.spinner(f"Running {current_models[selected_model_key]} on {uploaded_file.name}... (This may take a moment on the first run)"):
-            status, message, metrics, pipeline = process_and_train_model(
+            status, message, metrics, pipeline, sentiment_fig, review_length_fig, cm_counts_fig = process_and_train_model(
                 df_hash, 
                 df, 
                 selected_model_key
             )
-            
-            # Store the trained pipeline in session state for live prediction
             st.session_state['trained_pipeline'] = pipeline
             st.session_state['last_metrics'] = metrics
             st.session_state['last_status'] = status
             st.session_state['last_message'] = message
             st.session_state['last_model'] = current_models[selected_model_key]
+            st.session_state['sentiment_fig'] = sentiment_fig
+            st.session_state['review_length_fig'] = review_length_fig
+            st.session_state['cm_counts_fig'] = cm_counts_fig
 
     # --- 4. RESULTS SECTION BOX (Full Width) ---
     st.markdown("""
@@ -620,44 +607,103 @@ def main_app():
 
     if 'last_status' in st.session_state and st.session_state.last_status == "Success":
         metrics = st.session_state.last_metrics
+
+        # 1. ANALYSIS COMPLETE MESSAGE
         st.markdown(f"""
             <h3 class="text-xl font-bold text-green-300 mb-4">{st.session_state.last_message}</h3>
             <p class="text-gray-200 mb-2">Model Used: <code class="text-pink-300 font-bold">{st.session_state.last_model}</code></p>
             <p class="text-gray-200 mb-4">Pipeline Time: <code class="text-pink-300 font-bold">{metrics['Pipeline_Time']}</code></p>
+        """, unsafe_allow_html=True)
+
+        # 2. PRE-PROCESSING VISUALIZATIONS (Sentiment & Review Length)
+        st.markdown('<div class="mt-4">', unsafe_allow_html=True)
+        st.markdown(
+            '<h4 class="font-bold text-indigo-200 mb-2">Pre-processing Visualizations</h4>',
+            unsafe_allow_html=True
+        )
+        # Display the Sentiment Distribution and Review Length side-by-side
+        vis_col1, vis_col2 = st.columns(2)
+        
+        with vis_col1:
+            st.plotly_chart(st.session_state.sentiment_fig, use_container_width=True)
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-white">
+        with vis_col2:
+            st.plotly_chart(st.session_state.review_length_fig, use_container_width=True)
+            
+        st.markdown('</div>', unsafe_allow_html=True)
+
+
+        # 3-6. DETAILED METRIC BREAKDOWN (Text Metrics)
+        st.markdown('<div class="mt-8">', unsafe_allow_html=True)
+        st.markdown(
+            '<h3 class="text-xl font-bold text-pink-300 mb-4 border-b pb-2 border-pink-400">Detailed Metric Breakdown</h3>',
+            unsafe_allow_html=True
+        )
+
+        # --- Two Column Structure for Detailed Metrics ---
+        metric_col1, metric_col2 = st.columns(2, gap="large")
+
+        with metric_col1:
+            # 3. Classification Summary
+            st.markdown("""
                 <div>
                     <h4 class="font-bold text-indigo-200 mb-2">CLASSIFICATION SUMMARY</h4>
-                    <p>Accuracy: <span class="text-green-300">{metrics['Overall_Accuracy']}</span></p>
-                    <p>Kappa Statistics: <span class="text-yellow-300">{metrics['Kappa_Statistics']}</span></p>
-                    <p>MCC: <span class="text-yellow-300">{metrics['MCC']}</span></p>
-                    <p>ROC Area: <span class="text-yellow-300">{metrics['ROC_Area']}</span></p>
-                    <p>PRC Area: <span class="text-yellow-300">{metrics['PRC_Area']}</span></p>
+                    <p>Accuracy: <span class="text-green-300">{Overall_Accuracy}</span></p>
+                    <p>Kappa Statistics: <span class="text-yellow-300">{Kappa_Statistics}</span></p>
+                    <p>MCC: <span class="text-yellow-300">{MCC}</span></p>
+                    <p>ROC Area: <span class="text-yellow-300">{ROC_Area}</span></p>
+                    <p>PRC Area: <span class="text-yellow-300">{PRC_Area}</span></p>
                 </div>
+            """.format(**metrics), unsafe_allow_html=True)
+
+            # 5. CLASSIFICATION COUNT
+            st.markdown(f"""
+                <div class="mt-6">
+                    <h4 class="font-bold text-indigo-200 mb-2">CLASSIFICATION COUNT</h4>
+                    <p>Correctly Classified: <span class="text-green-300">{metrics['Correctly_Classified_Instances']}</span></p>
+                    <p>Incorrectly Classified: <span class="text-red-300">{metrics['Incorrectly_Classified_Instances']}</span></p>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with metric_col2:
+            # 4. Error & Size
+            st.markdown("""
                 <div>
                     <h4 class="font-bold text-indigo-200 mb-2">ERROR & SIZE</h4>
-                    <p>MAE: <span class="text-red-300">{metrics['Mean_Absolute_Error']}</span></p>
-                    <p>RMSE: <span class="text-red-300">{metrics['Root_Mean_Square_Error']}</span></p>
-                    <p>RAE: <span class="text-red-300">{metrics['Relative_Absolute_Error']}</span></p>
-                    <p>Test Set Size: <span class="text-cyan-300">{metrics['Test_Set_Size']}</span></p>
+                    <p>MAE: <span class="text-red-300">{Mean_Absolute_Error}</span></p>
+                    <p>RMSE: <span class="text-red-300">{Root_Mean_Square_Error}</span></p>
+                    <p>RAE: <span class="text-red-300">{Relative_Absolute_Error}</span></p>
+                    <p>Test Set Size: <span class="text-cyan-300">{Test_Set_Size}</span></p>
                 </div>
-                <div>
+            """.format(**metrics), unsafe_allow_html=True)
+            
+            # 6. POSITIVE CLASS METRICS 
+            st.markdown("""
+                <div class="mt-6">
                     <h4 class="font-bold text-indigo-200 mb-2">POSITIVE CLASS METRICS</h4>
-                    <p>Precision: <span class="text-green-300">{metrics['Detailed_Classification_Metrics']['Precision (Positive Class)']}</span></p>
-                    <p>Recall (TP Rate): <span class="text-green-300">{metrics['Detailed_Classification_Metrics']['Recall (Positive Class)']}</span></p>
-                    <p>F1 Score: <span class="text-green-300">{metrics['Detailed_Classification_Metrics']['F1_Score (F-Measure)']}</span></p>
-                    <p>FP Rate: <span class="text-red-300">{metrics['Detailed_Classification_Metrics']['FP_Rate']}</span></p>
+                    <p>Precision: <span class="text-green-300">{Precision (Positive Class)}</span></p>
+                    <p>Recall (TP Rate): <span class="text-green-300">{Recall (Positive Class)}</span></p>
+                    <p>F1 Score: <span class="text-green-300">{F1_Score (F-Measure)}</span></p>
+                    <p>FP Rate: <span class="text-red-300">{FP_Rate}</span></p>
                 </div>
-            </div>
+            """.format(**metrics['Detailed_Classification_Metrics']), unsafe_allow_html=True)
 
-            <div class="mt-6">
-                <h4 class="font-bold text-indigo-200 mb-2">CLASSIFICATION COUNT</h4>
-                <p>Correctly Classified: <span class="text-green-300">{metrics['Correctly_Classified_Instances']}</span></p>
-                <p>Incorrectly Classified: <span class="text-red-300">{metrics['Incorrectly_Classified_Instances']}</span></p>
-            </div>
+        # Confusion Matrix Summary Text (Full Width below 2 columns)
+        st.markdown(f"""
             <p class="mt-4 text-xs italic text-gray-400">Confusion Matrix: [[TN, FP], [FN, TP]] -> {metrics['Confusion_Matrix (TN, FP, FN, TP)']}</p>
-
         """, unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # 7. MODEL PERFORMANCE VISUALIZATION (Confusion Matrix) - FINAL POSITION
+        st.markdown('<div class="mt-8">', unsafe_allow_html=True)
+        st.markdown(
+            '<h3 class="text-xl font-bold text-pink-300 mb-4 border-b pb-2 border-pink-400">Model Performance Visualization (Confusion Matrix)</h3>',
+            unsafe_allow_html=True
+        )
+        st.plotly_chart(st.session_state.cm_counts_fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
     
     elif 'last_status' in st.session_state and st.session_state.last_status == "Error":
         st.error(st.session_state.last_message)
@@ -684,7 +730,11 @@ def main_app():
             col_in, col_btn = st.columns([4, 1])
 
             with col_in:
-                user_review = st.text_area("Enter your review here:", key="user_review_input", height=100, label_visibility="collapsed")
+                user_review = st.text_area("Enter your review here:", 
+                                           placeholder="Type your Opinion here........", 
+                                           key="user_review_input", 
+                                           height=100, 
+                                           label_visibility="collapsed")
             
             with col_btn:
                 # Add a vertical gap using custom styling to align the button
